@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Votación Artistas - Firebase</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            margin: 0;
+            color: white;
+            padding: 20px;
+        }
+        h1 { text-align: center; color: #e94560; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+            max-width: 1200px;
+            margin: 30px auto;
+        }
+        .card {
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .card.sentenciado {
+            border: 2px solid #e74c3c;
+            background: rgba(231, 76, 60, 0.2);
+        }
+        .card.sentenciado::before {
+            content: "⚠️ SENTENCIADO";
+            display: block;
+            background: #e74c3c;
+            color: white;
+            padding: 5px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        .card img {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid #e94560;
+            margin-bottom: 10px;
+        }
+        .card.sentenciado img {
+            filter: grayscale(100%);
+            border-color: #e74c3c;
+        }
+        .card h3 { margin: 5px 0; font-size: 1.3rem; }
+        .card p { color: rgba(255,255,255,0.7); margin: 5px 0; font-size: 0.9rem; }
+        .votos { font-size: 1.5rem; color: #e94560; font-weight: bold; margin: 10px 0; }
+        .btn-votar {
+            background: linear-gradient(135deg, #e94560, #533483);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1rem;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn-votar:hover { transform: scale(1.05); }
+        .cerrado {
+            background: rgba(255,255,255,0.2);
+            cursor: not-allowed;
+        }
+        .banner-cerrado {
+            background: #e74c3c;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2rem;
+        }
+        .error {
+            background: #e74c3c;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            margin: 20px auto;
+            max-width: 600px;
+        }
+        
+        /* Admin */
+        .admin-zone {
+            position: fixed;
+            bottom: 0;
+            right: 0;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+            z-index: 100;
+        }
+        .login-modal, .admin-panel-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .login-modal.active, .admin-panel-modal.active { display: flex; }
+        .login-box, .admin-content {
+            background: #1a1a2e;
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+            border: 1px solid #e94560;
+        }
+        .admin-content { max-width: 900px; text-align: left; max-height: 90vh; overflow-y: auto; }
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.3);
+            background: rgba(255,255,255,0.1);
+            color: white;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 12px 20px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 0.9rem;
+        }
+        .btn-primario { background: #e94560; color: white; }
+        .btn-segundo { background: rgba(255,255,255,0.2); color: white; }
+        .btn-peligro { background: #e74c3c; color: white; }
+        .btn-exito { background: #2ecc71; color: white; }
+        
+        .admin-float {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 99;
+        }
+        .admin-float.active { display: flex; }
+        
+        .admin-item {
+            background: rgba(255,255,255,0.05);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .admin-item.sentenciado { border: 1px solid #e74c3c; background: rgba(231, 76, 60, 0.1); }
+        
+        .admin-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .admin-item-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .admin-item img {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        
+        .porcentaje { color: #2ecc71; font-weight: bold; font-size: 1.1rem; }
+        
+        .link-input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 5px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.05);
+            color: white;
+            font-size: 0.85rem;
+        }
+        
+        .toggle-switch {
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 13px;
+            position: relative;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        .toggle-switch.active { background: #2ecc71; }
+        .toggle-switch::after {
+            content: "";
+            position: absolute;
+            width: 22px;
+            height: 22px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: 0.3s;
+        }
+        .toggle-switch.active::after { left: 26px; }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-box {
+            background: rgba(255,255,255,0.05);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .stat-num { font-size: 1.5rem; color: #e94560; font-weight: bold; }
+        
+        .edit-link-btn {
+            background: #3498db;
+            color: white;
+            padding: 6px 12px;
+            font-size: 0.8rem;
+            margin: 0;
+        }
+        
+        .save-link-btn {
+            background: #2ecc71;
+            color: white;
+            padding: 6px 12px;
+            font-size: 0.8rem;
+            margin: 0;
+            display: none;
+        }
+        
+        .link-display {
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.6);
+            word-break: break-all;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🏆 Votación de Artistas</h1>
+    <p style="text-align:center; color:rgba(255,255,255,0.7);">¿Quién es tu favorito? ¡Vota ahora!</p>
+    
+    <div class="banner-cerrado" id="bannerCerrado">
+        <h3>🚫 Votación Cerrada</h3>
+        <p>La votación ha finalizado</p>
+    </div>
+    
+    <div id="loading" class="loading">⏳ Cargando datos...</div>
+    <div id="error" class="error" style="display:none;"></div>
+    <div id="grid" class="grid" style="display:none;"></div>
+    
+    <!-- Zona Admin invisible -->
+    <div class="admin-zone" onclick="mostrarLogin()"></div>
+    
+    <!-- Botones Admin -->
+    <div class="admin-float" id="adminFloat">
+        <button class="btn-primario" onclick="mostrarPanel()">⚙️ Panel Admin</button>
+        <button class="btn-segundo" onclick="salirAdmin()">🚪 Salir</button>
+    </div>
+    
+    <!-- Login -->
+    <div class="login-modal" id="loginModal" onclick="cerrarLogin(event)">
+        <div class="login-box" onclick="event.stopPropagation()">
+            <h2>🔐 Acceso Admin</h2>
+            <input type="password" id="passInput" placeholder="Contraseña">
+            <button class="btn-primario" onclick="verificarPass()" style="width:100%;">Ingresar</button>
+            <button class="btn-segundo" onclick="cerrarLogin()" style="width:100%;">Cancelar</button>
+            <p id="errorLogin" style="color:#e74c3c; display:none;">Contraseña incorrecta</p>
+        </div>
+    </div>
+    
+    <!-- Panel Admin -->
+    <div class="admin-panel-modal" id="panelModal" onclick="cerrarPanel(event)">
+        <div class="admin-content" onclick="event.stopPropagation()">
+            <h2 style="text-align:center; margin-top:0;">⚙️ Panel de Administración</h2>
+            
+            <div style="margin:20px 0; padding:15px; background:rgba(255,255,255,0.05); border-radius:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px;">
+                    <div>
+                        <span>Votación: </span>
+                        <span class="toggle-switch" id="toggleVotacion" onclick="cambiarEstadoVotacion()"></span>
+                        <span id="estadoTexto" style="margin-left:10px;">Abierta</span>
+                    </div>
+                    <div>
+                        <strong>Total Votos: <span id="totalVotos" style="color:#e94560;">0</span></strong>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="stat-num" id="cantArtistas">0</div>
+                    <div style="font-size:0.8rem; color:rgba(255,255,255,0.6);">Artistas</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-num" id="cantSentenciados">0</div>
+                    <div style="font-size:0.8rem; color:rgba(255,255,255,0.6);">Sentenciados</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-num" id="nombreLider" style="font-size:1rem;">-</div>
+                    <div style="font-size:0.8rem; color:rgba(255,255,255,0.6);">Líder</div>
+                </div>
+            </div>
+            
+            <h3>📊 Artistas (con % y Links MP)</h3>
+            <p style="color:rgba(255,255,255,0.6); font-size:0.85rem; margin-bottom:15px;">
+                💡 Puedes editar el link de Mercado Pago de cada artista haciendo clic en "Editar Link"
+            </p>
+            <div id="listaAdmin"></div>
+            
+            <div style="margin-top:30px; padding:20px; background:rgba(255,255,255,0.05); border-radius:10px;">
+                <h3>➕ Agregar Nuevo Artista</h3>
+                <input type="text" id="nuevoNombre" placeholder="Nombre del artista">
+                <input type="text" id="nuevoGenero" placeholder="Género musical">
+                <input type="text" id="nuevaImagen" placeholder="URL de imagen (opcional)">
+                <input type="text" id="nuevoLink" placeholder="Link de Mercado Pago (opcional)">
+                <input type="number" id="nuevosVotos" placeholder="Votos iniciales" value="0">
+                <button class="btn-exito" onclick="agregarArtista()" style="width:100%;">➕ Agregar Artista</button>
+            </div>
+            
+            <div style="margin-top:20px; display:flex; gap:10px; flex-wrap:wrap;">
+                <button class="btn-segundo" onclick="resetearVotos()">🔄 Resetear Votos</button>
+                <button class="btn-peligro" onclick="quitarSentencias()">✅ Quitar Sentencias</button>
+                <button class="btn-peligro" onclick="eliminarTodos()">🗑️ Eliminar Todos</button>
+            </div>
+            
+            <button class="btn-segundo" onclick="cerrarPanel()" style="width:100%; margin-top:20px;">Cerrar Panel</button>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <script>
+        // ================= CONFIGURACIÓN FIREBASE (TUS CREDENCIALES) =================
+        const firebaseConfig = {
+            apiKey: "AIzaSyD79uExtxv9_c4ke72kAMyrARpdLb_tgXU",
+            authDomain: "lb-votacion.firebaseapp.com",
+            projectId: "lb-votacion",
+            storageBucket: "lb-votacion.firebasestorage.app",
+            messagingSenderId: "825617991714",
+            appId: "1:825617991714:web:e58a69fd3daa6b36eca27b"
+        };
+        
+        // Inicializar Firebase
+        let db;
+        try {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+            console.log("✅ Firebase conectado");
+        } catch(e) {
+            console.error("❌ Error Firebase:", e);
+            mostrarError("Error al conectar con Firebase: " + e.message);
+        }
+        
+        // ================= CONFIGURACIÓN APP =================
+        const CONTRASENA = "admin123";
+        let artistas = [];
+        let votacionAbierta = true;
+        let esAdmin = false;
+        
+        // ================= FUNCIONES FIREBASE =================
+        
+        // Cargar datos desde Firebase
+        async function cargarDatos() {
+            try {
+                // Cargar configuración
+                const configDoc = await db.collection('config').doc('general').get();
+                if(configDoc.exists) {
+                    votacionAbierta = configDoc.data().votacionAbierta !== false;
+                } else {
+                    // Crear documento inicial
+                    await db.collection('config').doc('general').set({ votacionAbierta: true });
+                }
+                
+                // Cargar artistas
+                const snapshot = await db.collection('artistas').orderBy('votos', 'desc').get();
+                artistas = [];
+                snapshot.forEach(doc => {
+                    artistas.push({ id: doc.id, ...doc.data() });
+                });
+                
+                // Si no hay artistas, crear los iniciales
+                if(artistas.length === 0) {
+                    await crearArtistasIniciales();
+                }
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('grid').style.display = 'grid';
+                mostrarArtistas();
+                actualizarToggle();
+                
+            } catch(e) {
+                console.error("Error cargando datos:", e);
+                mostrarError("Error al cargar datos: " + e.message + "<br><br>Si es la primera vez, asegúrate de haber creado la base de datos Firestore en modo de prueba.");
+            }
+        }
+        
+        // Crear artistas iniciales
+        async function crearArtistasIniciales() {
+            const iniciales = [
+                { nombre: "Bad Bunny", genero: "Reggaeton", imagen: "https://i.scdn.co/image/ab6761610000e5eb6b8a1a1b5c0c3c3c3c3c3c3c", votos: 15420, sentenciado: false, linkMP: "" },
+                { nombre: "Taylor Swift", genero: "Pop", imagen: "https://i.scdn.co/image/ab6761610000e5eb6b8a1a1b5c0c3c3c3c3c3c3c", votos: 14250, sentenciado: false, linkMP: "" },
+                { nombre: "The Weeknd", genero: "R&B", imagen: "https://i.scdn.co/image/ab6761610000e5eb6b8a1a1b5c0c3c3c3c3c3c3c", votos: 12890, sentenciado: false, linkMP: "" },
+                { nombre: "Rosalía", genero: "Flamenco Pop", imagen: "https://i.scdn.co/image/ab6761610000e5eb6b8a1a1b5c0c3c3c3c3c3c3c", votos: 11200, sentenciado: true, linkMP: "" },
+                { nombre: "Drake", genero: "Hip Hop", imagen: "https://i.scdn.co/image/ab6761610000e5eb6b8a1a1b5c0c3c3c3c3c3c3c", votos: 10500, sentenciado: false, linkMP: "" },
+                { nombre: "Billie Eilish", genero: "Alternative", imagen: "https://i.scdn.co/image/ab6761610000e5eb6b8a1a1b5c0c3c3c3c3c3c3c", votos: 9870, sentenciado: false, linkMP: "" }
+            ];
+            
+            for(let art of iniciales) {
+                await db.collection('artistas').add(art);
+            }
+            
+            // Recargar
+            const snapshot = await db.collection('artistas').orderBy('votos', 'desc').get();
+            artistas = [];
+            snapshot.forEach(doc => {
+                artistas.push({ id: doc.id, ...doc.data() });
+            });
+        }
+        
+        // Guardar cambios en Firebase
+        async function guardarArtista(id, datos) {
+            try {
+                await db.collection('artistas').doc(id).update(datos);
+            } catch(e) {
+                console.error("Error guardando:", e);
+                alert("Error al guardar: " + e.message);
+            }
+        }
+        
+        async function guardarConfig() {
+            try {
+                await db.collection('config').doc('general').update({ votacionAbierta: votacionAbierta });
+            } catch(e) {
+                console.error("Error guardando config:", e);
+            }
+        }
+        
+        // ================= RENDER =================
+        function mostrarArtistas() {
+            const grid = document.getElementById('grid');
+            const maxVotos = Math.max(...artistas.map(a => a.votos)) || 1;
+            
+            document.getElementById('bannerCerrado').style.display = votacionAbierta ? 'none' : 'block';
+            
+            let html = '';
+            for(let i = 0; i < artistas.length; i++) {
+                const art = artistas[i];
+                const pct = (art.votos / maxVotos) * 100;
+                const claseSent = art.sentenciado ? 'sentenciado' : '';
+                const claseBtn = votacionAbierta ? '' : 'cerrado';
+                const textoBtn = votacionAbierta ? '❤️ Votar' : '🔒 Cerrado';
+                
+                const linkDestino = art.linkMP || '#';
+                let onclickAction = '';
+                
+                if(votacionAbierta) {
+                    if(art.linkMP) {
+                        onclickAction = `registrarVoto('${art.id}')`;
+                    } else {
+                        onclickAction = 'alert("Link de pago no configurado")';
+                    }
+                } else {
+                    onclickAction = 'return false';
+                }
+                
+                html += `<div class="card ${claseSent}">
+                    <div style="position:absolute; top:10px; right:10px; font-size:2rem; color:rgba(255,255,255,0.2); font-weight:bold;">#${i + 1}</div>
+                    <img src="${art.imagen}" onerror="this.src='https://via.placeholder.com/100/e94560/ffffff?text=${art.nombre.charAt(0)}'">
+                    <h3>${art.nombre}</h3>
+                    <p>${art.genero}</p>
+                    <div class="votos">${art.votos.toLocaleString()} votos</div>
+                    <a href="${linkDestino}" class="btn-votar ${claseBtn}" ${art.linkMP && votacionAbierta ? 'target="_blank"' : ''} onclick="${onclickAction}">${textoBtn}</a>
+                    <div style="width:100%; height:6px; background:rgba(255,255,255,0.1); border-radius:3px; margin-top:10px;">
+                        <div style="width:${pct}%; height:100%; background:linear-gradient(90deg,#e94560,#533483); border-radius:3px;"></div>
+                    </div>
+                </div>`;
+            }
+            
+            grid.innerHTML = html;
+        }
+        
+        async function registrarVoto(id) {
+            if(!votacionAbierta) return;
+            
+            const artIndex = artistas.findIndex(a => a.id === id);
+            if(artIndex === -1) return;
+            
+            // Incrementar voto
+            artistas[artIndex].votos++;
+            
+            // Guardar en Firebase
+            await guardarArtista(id, { votos: artistas[artIndex].votos });
+            
+            // Actualizar vista
+            mostrarArtistas();
+            if(esAdmin) mostrarListaAdmin();
+        }
+        
+        // ================= ADMIN =================
+        function mostrarLogin() {
+            document.getElementById('loginModal').classList.add('active');
+            document.getElementById('passInput').value = '';
+            document.getElementById('errorLogin').style.display = 'none';
+        }
+        
+        function cerrarLogin(e) {
+            if(!e || e.target.id === 'loginModal') {
+                document.getElementById('loginModal').classList.remove('active');
+            }
+        }
+        
+        function verificarPass() {
+            if(document.getElementById('passInput').value === CONTRASENA) {
+                esAdmin = true;
+                cerrarLogin();
+                document.getElementById('adminFloat').classList.add('active');
+                actualizarToggle();
+            } else {
+                document.getElementById('errorLogin').style.display = 'block';
+            }
+        }
+        
+        function salirAdmin() {
+            esAdmin = false;
+            document.getElementById('adminFloat').classList.remove('active');
+            cerrarPanel();
+        }
+        
+        function mostrarPanel() {
+            mostrarListaAdmin();
+            actualizarStats();
+            document.getElementById('panelModal').classList.add('active');
+        }
+        
+        function cerrarPanel(e) {
+            if(!e || e.target.id === 'panelModal') {
+                document.getElementById('panelModal').classList.remove('active');
+            }
+        }
+        
+        function actualizarToggle() {
+            const t = document.getElementById('toggleVotacion');
+            const s = document.getElementById('estadoTexto');
+            if(votacionAbierta) {
+                t.classList.add('active');
+                s.textContent = 'Abierta';
+                s.style.color = '#2ecc71';
+            } else {
+                t.classList.remove('active');
+                s.textContent = 'Cerrada';
+                s.style.color = '#e74c3c';
+            }
+        }
+        
+        async function cambiarEstadoVotacion() {
+            votacionAbierta = !votacionAbierta;
+            await guardarConfig();
+            actualizarToggle();
+            mostrarArtistas();
+        }
+        
+        function actualizarStats() {
+            const total = artistas.reduce((sum, a) => sum + a.votos, 0);
+            const sent = artistas.filter(a => a.sentenciado).length;
+            const lider = artistas.sort((a, b) => b.votos - a.votos)[0];
+            
+            document.getElementById('totalVotos').textContent = total.toLocaleString();
+            document.getElementById('cantArtistas').textContent = artistas.length;
+            document.getElementById('cantSentenciados').textContent = sent;
+            document.getElementById('nombreLider').textContent = lider ? lider.nombre : '-';
+        }
+        
+        function mostrarListaAdmin() {
+            const lista = document.getElementById('listaAdmin');
+            const total = artistas.reduce((sum, a) => sum + a.votos, 0);
+            const ordenados = [...artistas].sort((a, b) => b.votos - a.votos);
+            
+            let html = '';
+            for(let art of ordenados) {
+                const pct = total > 0 ? ((art.votos / total) * 100).toFixed(1) : 0;
+                const claseSent = art.sentenciado ? 'sentenciado' : '';
+                const tieneLink = art.linkMP && art.linkMP !== '';
+                const linkTexto = tieneLink ? art.linkMP.substring(0, 40) + '...' : '❌ Sin link';
+                const linkColor = tieneLink ? '#2ecc71' : '#e74c3c';
+                
+                html += `<div class="admin-item ${claseSent}" id="artista-${art.id}">
+                    <div class="admin-item-header">
+                        <div class="admin-item-info">
+                            <img src="${art.imagen}" onerror="this.src='https://via.placeholder.com/40/e94560/ffffff?text=${art.nombre.charAt(0)}'">
+                            <div>
+                                <strong>${art.nombre}</strong>
+                                <div style="font-size:0.8rem; color:rgba(255,255,255,0.6);">${art.genero} • ${art.votos} votos</div>
+                            </div>
+                        </div>
+                        <div class="porcentaje">${pct}%</div>
+                        <div>
+                            <button class="${art.sentenciado ? 'btn-peligro' : 'btn-segundo'}" onclick="toggleSentencia('${art.id}')">${art.sentenciado ? '✅ Quitar' : '⚠️ Sentenciar'}</button>
+                            <button class="btn-peligro" onclick="eliminarArtista('${art.id}')">🗑️</button>
+                        </div>
+                    </div>
+                    <div style="margin-top:10px; padding:10px; background:rgba(0,0,0,0.2); border-radius:8px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                            <span style="font-size:0.85rem; color:rgba(255,255,255,0.7);">🔗 Link MP:</span>
+                            <button class="edit-link-btn" id="btn-editar-${art.id}" onclick="editarLink('${art.id}')">✏️ Editar</button>
+                            <button class="save-link-btn" id="btn-guardar-${art.id}" onclick="guardarLink('${art.id}')">💾 Guardar</button>
+                        </div>
+                        <div class="link-display" id="link-display-${art.id}" style="color:${linkColor};">${linkTexto}</div>
+                        <input type="text" class="link-input" id="link-input-${art.id}" value="${art.linkMP || ''}" placeholder="https://mpago.la/..." style="display:none;">
+                    </div>
+                </div>`;
+            }
+            
+            lista.innerHTML = html;
+        }
+        
+        function editarLink(id) {
+            document.getElementById('link-display-' + id).style.display = 'none';
+            document.getElementById('link-input-' + id).style.display = 'block';
+            document.getElementById('btn-editar-' + id).style.display = 'none';
+            document.getElementById('btn-guardar-' + id).style.display = 'inline-block';
+            document.getElementById('link-input-' + id).focus();
+        }
+        
+        async function guardarLink(id) {
+            const nuevoLink = document.getElementById('link-input-' + id).value.trim();
+            
+            if(nuevoLink && !nuevoLink.includes('mpago.la')) {
+                if(!confirm('El link no parece de Mercado Pago. ¿Guardar?')) return;
+            }
+            
+            const artIndex = artistas.findIndex(a => a.id === id);
+            if(artIndex !== -1) {
+                artistas[artIndex].linkMP = nuevoLink;
+                await guardarArtista(id, { linkMP: nuevoLink });
+                mostrarArtistas();
+                mostrarListaAdmin();
+                alert('✅ Link guardado');
+            }
+        }
+        
+        async function toggleSentencia(id) {
+            const artIndex = artistas.findIndex(a => a.id === id);
+            if(artIndex !== -1) {
+                artistas[artIndex].sentenciado = !artistas[artIndex].sentenciado;
+                await guardarArtista(id, { sentenciado: artistas[artIndex].sentenciado });
+                mostrarArtistas();
+                mostrarListaAdmin();
+                actualizarStats();
+            }
+        }
+        
+        async function eliminarArtista(id) {
+            if(!confirm('¿Eliminar este artista?')) return;
+            
+            try {
+                await db.collection('artistas').doc(id).delete();
+                artistas = artistas.filter(a => a.id !== id);
+                mostrarArtistas();
+                mostrarListaAdmin();
+                actualizarStats();
+            } catch(e) {
+                alert('Error al eliminar: ' + e.message);
+            }
+        }
+        
+        async function agregarArtista() {
+            const nombre = document.getElementById('nuevoNombre').value.trim();
+            const genero = document.getElementById('nuevoGenero').value.trim();
+            const imagen = document.getElementById('nuevaImagen').value.trim() || 'https://via.placeholder.com/100/e94560/ffffff?text=?';
+            const link = document.getElementById('nuevoLink').value.trim();
+            const votos = parseInt(document.getElementById('nuevosVotos').value) || 0;
+            
+            if(!nombre) { alert('Nombre obligatorio'); return; }
+            
+            try {
+                const docRef = await db.collection('artistas').add({
+                    nombre: nombre,
+                    genero: genero || 'Sin género',
+                    imagen: imagen,
+                    votos: votos,
+                    sentenciado: false,
+                    linkMP: link
+                });
+                
+                artistas.push({
+                    id: docRef.id,
+                    nombre: nombre,
+                    genero: genero || 'Sin género',
+                    imagen: imagen,
+                    votos: votos,
+                    sentenciado: false,
+                    linkMP: link
+                });
+                
+                mostrarArtistas();
+                mostrarListaAdmin();
+                actualizarStats();
+                
+                document.getElementById('nuevoNombre').value = '';
+                document.getElementById('nuevoGenero').value = '';
+                document.getElementById('nuevaImagen').value = '';
+                document.getElementById('nuevoLink').value = '';
+                document.getElementById('nuevosVotos').value = '0';
+                
+                alert('✅ Artista agregado');
+            } catch(e) {
+                alert('Error: ' + e.message);
+            }
+        }
+        
+        async function resetearVotos() {
+            if(!confirm('¿Resetear todos los votos?')) return;
+            
+            try {
+                const batch = db.batch();
+                for(let art of artistas) {
+                    art.votos = 0;
+                    const ref = db.collection('artistas').doc(art.id);
+                    batch.update(ref, { votos: 0 });
+                }
+                await batch.commit();
+                
+                mostrarArtistas();
+                mostrarListaAdmin();
+                actualizarStats();
+            } catch(e) {
+                alert('Error: ' + e.message);
+            }
+        }
+        
+        async function quitarSentencias() {
+            if(!confirm('¿Quitar todas las sentencias?')) return;
+            
+            try {
+                const batch = db.batch();
+                for(let art of artistas) {
+                    art.sentenciado = false;
+                    const ref = db.collection('artistas').doc(art.id);
+                    batch.update(ref, { sentenciado: false });
+                }
+                await batch.commit();
+                
+                mostrarArtistas();
+                mostrarListaAdmin();
+                actualizarStats();
+            } catch(e) {
+                alert('Error: ' + e.message);
+            }
+        }
+        
+        async function eliminarTodos() {
+            if(!confirm('¿Eliminar TODOS?')) return;
+            if(!confirm('¿ESTÁS SEGURO?')) return;
+            
+            try {
+                const batch = db.batch();
+                for(let art of artistas) {
+                    const ref = db.collection('artistas').doc(art.id);
+                    batch.delete(ref);
+                }
+                await batch.commit();
+                
+                artistas = [];
+                mostrarArtistas();
+                mostrarListaAdmin();
+                actualizarStats();
+            } catch(e) {
+                alert('Error: ' + e.message);
+            }
+        }
+        
+        function mostrarError(msg) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').style.display = 'block';
+            document.getElementById('error').innerHTML = msg;
+        }
+        
+        // Iniciar
+        cargarDatos();
+    </script>
+</body>
+</html>
