@@ -26,6 +26,7 @@
             padding: 20px;
             text-align: center;
             border: 1px solid rgba(255,255,255,0.2);
+            position: relative;
         }
         .card.sentenciado {
             border: 2px solid #e74c3c;
@@ -157,7 +158,6 @@
         .btn-segundo { background: rgba(255,255,255,0.2); color: white; }
         .btn-peligro { background: #e74c3c; color: white; }
         .btn-exito { background: #2ecc71; color: white; }
-        .btn-amarillo { background: #f39c12; color: white; }
 
         .admin-float {
             display: none;
@@ -276,22 +276,6 @@
             margin-top: 5px;
         }
 
-        /* Tabla de votos pendientes */
-        .tabla-pendientes {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
-        .tabla-pendientes th, .tabla-pendientes td {
-            padding: 8px;
-            text-align: left;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-            font-size: 0.85rem;
-        }
-        .tabla-pendientes th {
-            background: rgba(255,255,255,0.05);
-            font-weight: bold;
-        }
         .pendiente-item {
             background: rgba(243, 156, 18, 0.1);
             border: 1px solid #f39c12;
@@ -418,7 +402,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 
     <script>
-        // ================= CONFIGURACIÓN FIREBASE (TUS CREDENCIALES) =================
+        // ================= CONFIGURACIÓN FIREBASE =================
         const firebaseConfig = {
             apiKey: "AIzaSyD79uExtxv9_c4ke72kAMyrARpdLb_tgXU",
             authDomain: "lb-votacion.firebaseapp.com",
@@ -428,7 +412,6 @@
             appId: "1:825617991714:web:e58a69fd3daa6b36eca27b"
         };
 
-        // Inicializar Firebase
         let db;
         try {
             firebase.initializeApp(firebaseConfig);
@@ -448,10 +431,8 @@
 
         // ================= FUNCIONES FIREBASE =================
 
-        // Cargar datos desde Firebase
         async function cargarDatos() {
             try {
-                // Cargar configuración
                 const configDoc = await db.collection('config').doc('general').get();
                 if(configDoc.exists) {
                     votacionAbierta = configDoc.data().votacionAbierta !== false;
@@ -459,21 +440,12 @@
                     await db.collection('config').doc('general').set({ votacionAbierta: true });
                 }
 
-                // Cargar artistas
                 const snapshot = await db.collection('artistas').orderBy('votos', 'desc').get();
                 artistas = [];
                 snapshot.forEach(doc => {
                     artistas.push({ id: doc.id, ...doc.data() });
                 });
 
-                // Cargar votos pendientes
-                const pendSnapshot = await db.collection('votosPendientes').orderBy('fecha', 'desc').get();
-                votosPendientes = [];
-                pendSnapshot.forEach(doc => {
-                    votosPendientes.push({ id: doc.id, ...doc.data() });
-                });
-
-                // Si no hay artistas, crear los iniciales
                 if(artistas.length === 0) {
                     await crearArtistasIniciales();
                 }
@@ -485,11 +457,10 @@
 
             } catch(e) {
                 console.error("Error cargando datos:", e);
-                mostrarError("Error al cargar datos: " + e.message + "<br><br>Si es la primera vez, asegúrate de haber creado la base de datos Firestore en modo de prueba.");
+                mostrarError("Error al cargar datos: " + e.message);
             }
         }
 
-        // Crear artistas iniciales
         async function crearArtistasIniciales() {
             const iniciales = [
                 { nombre: "Bad Bunny", genero: "Reggaeton", imagen: "https://i.scdn.co/image/ab6761610000e5eb6b8a1a1b5c0c3c3c3c3c3c3c", votos: 15420, sentenciado: false, linkMP: "" },
@@ -511,7 +482,6 @@
             });
         }
 
-        // Guardar cambios en Firebase
         async function guardarArtista(id, datos) {
             try {
                 await db.collection('artistas').doc(id).update(datos);
@@ -544,20 +514,14 @@
                 const claseBtn = votacionAbierta ? '' : 'cerrado';
                 const textoBtn = votacionAbierta ? '❤️ Votar' : '🔒 Cerrado';
 
-                const linkDestino = art.linkMP || '#';
-                let onclickAction = '';
-                let targetAttr = '';
-
-                if(votacionAbierta) {
-                    if(art.linkMP) {
-                        // GUARDAR VOTO PENDIENTE Y REDIRIGIR A MP
-                        onclickAction = `guardarVotoPendiente('${art.id}', '${art.linkMP}'); return true;`;
-                        targetAttr = 'target="_blank"';
-                    } else {
-                        onclickAction = 'alert("Link de pago no configurado"); return false;';
-                    }
+                // USAR BUTTON EN VEZ DE <a> PARA CONTROLAR EL CLICK
+                let btnHtml = '';
+                if(votacionAbierta && art.linkMP) {
+                    btnHtml = `<button class="btn-votar ${claseBtn}" onclick="procesarVoto(event, '${art.id}', '${art.linkMP.replace(/'/g, "\'")}')">${textoBtn}</button>`;
+                } else if(votacionAbierta && !art.linkMP) {
+                    btnHtml = `<button class="btn-votar ${claseBtn}" onclick="alert('Link de pago no configurado')">${textoBtn}</button>`;
                 } else {
-                    onclickAction = 'return false;';
+                    btnHtml = `<button class="btn-votar cerrado" disabled>${textoBtn}</button>`;
                 }
 
                 html += `<div class="card ${claseSent}">
@@ -566,7 +530,7 @@
                     <h3>${art.nombre}</h3>
                     <p>${art.genero}</p>
                     <div class="votos">${art.votos.toLocaleString()} votos</div>
-                    <a href="${linkDestino}" class="btn-votar ${claseBtn}" ${targetAttr} onclick="${onclickAction}">${textoBtn}</a>
+                    ${btnHtml}
                     <div style="width:100%; height:6px; background:rgba(255,255,255,0.1); border-radius:3px; margin-top:10px;">
                         <div style="width:${pct}%; height:100%; background:linear-gradient(90deg,#e94560,#533483); border-radius:3px;"></div>
                     </div>
@@ -576,24 +540,30 @@
             grid.innerHTML = html;
         }
 
-        // ================= NUEVO: GUARDAR VOTO PENDIENTE (NO SUMA AL CONTADOR) =================
-        async function guardarVotoPendiente(idArtista, linkMP) {
-            if(!votacionAbierta) return false;
+        // ================= NUEVO: PROCESAR VOTO (GUARDA PENDIENTE Y ABRE MP) =================
+        async function procesarVoto(event, idArtista, linkMP) {
+            event.preventDefault();
+
+            if(!votacionAbierta) return;
 
             const art = artistas.find(a => a.id === idArtista);
-            if(!art) return false;
+            if(!art) return;
+
+            console.log("Guardando voto pendiente para:", art.nombre);
 
             try {
-                // Guardar en votosPendientes (NO en votos del artista)
-                await db.collection('votosPendientes').add({
+                // Guardar en votosPendientes
+                const docRef = await db.collection('votosPendientes').add({
                     artistaId: idArtista,
                     artistaNombre: art.nombre,
-                    fecha: new Date().toISOString(),
+                    fecha: firebase.firestore.FieldValue.serverTimestamp(),
                     estado: 'pendiente',
                     linkMP: linkMP
                 });
 
-                // Mostrar mensaje al usuario
+                console.log("✅ Voto pendiente guardado:", docRef.id);
+
+                // Mostrar mensaje
                 const msg = document.getElementById('mensajePago');
                 msg.style.display = 'block';
                 setTimeout(() => { msg.style.display = 'none'; }, 5000);
@@ -603,15 +573,16 @@
                     await cargarPendientes();
                 }
 
-                return true; // Permite que el link de MP se abra
+                // Abrir Mercado Pago en nueva pestaña
+                window.open(linkMP, '_blank');
+
             } catch(e) {
-                console.error("Error guardando voto pendiente:", e);
+                console.error("❌ Error guardando voto pendiente:", e);
                 alert("Error al registrar tu voto. Intenta de nuevo.");
-                return false;
             }
         }
 
-        // ================= NUEVO: APROBAR VOTO (DESDE ADMIN) =================
+        // ================= APROBAR VOTO =================
         async function aprobarVoto(pendienteId) {
             try {
                 const pendDoc = await db.collection('votosPendientes').doc(pendienteId).get();
@@ -635,7 +606,7 @@
                 // Marcar como aprobado
                 await db.collection('votosPendientes').doc(pendienteId).update({
                     estado: 'aprobado',
-                    fechaAprobacion: new Date().toISOString()
+                    fechaAprobacion: firebase.firestore.FieldValue.serverTimestamp()
                 });
 
                 // Recargar todo
@@ -653,14 +624,14 @@
             }
         }
 
-        // ================= NUEVO: RECHAZAR VOTO (DESDE ADMIN) =================
+        // ================= RECHAZAR VOTO =================
         async function rechazarVoto(pendienteId) {
             if(!confirm("¿Rechazar este voto?")) return;
 
             try {
                 await db.collection('votosPendientes').doc(pendienteId).update({
                     estado: 'rechazado',
-                    fechaRechazo: new Date().toISOString()
+                    fechaRechazo: firebase.firestore.FieldValue.serverTimestamp()
                 });
 
                 await cargarPendientes();
@@ -671,7 +642,7 @@
             }
         }
 
-        // ================= NUEVO: CARGAR PENDIENTES =================
+        // ================= CARGAR PENDIENTES =================
         async function cargarPendientes() {
             try {
                 const snapshot = await db.collection('votosPendientes')
@@ -700,7 +671,13 @@
 
             let html = '';
             for(let voto of votosPendientes) {
-                const fecha = new Date(voto.fecha).toLocaleString('es-AR');
+                let fecha = 'Fecha no disponible';
+                if(voto.fecha && voto.fecha.toDate) {
+                    fecha = voto.fecha.toDate().toLocaleString('es-AR');
+                } else if(voto.fecha) {
+                    fecha = new Date(voto.fecha).toLocaleString('es-AR');
+                }
+
                 html += `<div class="pendiente-item">
                     <div>
                         <strong>${voto.artistaNombre}</strong>
@@ -749,7 +726,7 @@
         function mostrarPanel() {
             mostrarListaAdmin();
             actualizarStats();
-            cargarPendientes(); // Cargar pendientes al abrir panel
+            cargarPendientes();
             document.getElementById('panelModal').classList.add('active');
         }
 
@@ -783,7 +760,7 @@
         function actualizarStats() {
             const total = artistas.reduce((sum, a) => sum + a.votos, 0);
             const sent = artistas.filter(a => a.sentenciado).length;
-            const lider = artistas.sort((a, b) => b.votos - a.votos)[0];
+            const lider = [...artistas].sort((a, b) => b.votos - a.votos)[0];
 
             document.getElementById('totalVotos').textContent = total.toLocaleString();
             document.getElementById('cantArtistas').textContent = artistas.length;
